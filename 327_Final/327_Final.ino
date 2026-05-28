@@ -45,7 +45,7 @@ const int REGION_CH_HI[NUM_REGIONS] = {  3,  7, 11, 15 };
 
 // --- STRIKE SENSITIVITY (per drum) -----------------------------------
 //   ADC jump within one 10 ms sample that counts as a hit.
-const int DRUM_THRESHOLD[NUM_DRUMS] = { 150, 150, 150, 150 };
+const int DRUM_THRESHOLD[NUM_DRUMS] = {200, 50, 50, 100 };
 
 // --- ERM REGION PROFILE PER DRUM -------------------------------------
 //   ERM_PROFILE[drum][region] = 0..255 peak strength this drum sends to
@@ -53,23 +53,23 @@ const int DRUM_THRESHOLD[NUM_DRUMS] = { 150, 150, 150, 150 };
 //
 //                              region:  1    2    3    4
 const int ERM_PROFILE[NUM_DRUMS][NUM_REGIONS] = {
-  /* drum 1 */                        { 255, 0,   0,   0 },
-  /* drum 2 */                        {   0, 255, 0,   0 },
-  /* drum 3 */                        {   0,   0, 255, 0 },
-  /* drum 4 */                        { 0,   0,   0, 255 },
+  /* drum 1 */                        { 255, 255,   150,   150 },
+  /* drum 2 */                        {   200, 200, 200,   200 },
+  /* drum 3 */                        {   150, 150, 150,   150 },
+  /* drum 4 */                        { 200,   200,   100, 100 },
 };
 
 // --- ERM DECAY RATE PER DRUM -----------------------------------------
 //   Multiplier per 10 ms. ~0.85 snappy, ~0.95 medium, ~0.98 long.
-const float ERM_DECAY[NUM_DRUMS] = { 0.95, 0.90, 0.92, 0.97 };
+const float ERM_DECAY[NUM_DRUMS] = { 0.94, 0.93, 0.93, 0.94 };
 
 // --- BASS PROFILE PER DRUM -------------------------------------------
 //   BASS_PEAK  = 0..255 peak bass amplitude this drum contributes.
 //   BASS_DECAY = decay multiplier per 10 ms (closer to 1.0 = longer).
 //   The single TT25 plays the SUM of all active drums' bass envelopes,
 //   so two quick hits thump harder and longer than one.
-const int   BASS_PEAK [NUM_DRUMS] = { 255, 220,  200, 180 };
-const float BASS_DECAY[NUM_DRUMS] = { 0.96, 0.94, 0.92, 0.97 };
+const int   BASS_PEAK [NUM_DRUMS] = { 255, 150,  100, 240 };
+const float BASS_DECAY[NUM_DRUMS] = { 0.90, 0.80, 0.80, 0.85 };
 
 // --- BASS PITCH ------------------------------------------------------
 const int BASS_FREQUENCY = 25;        // Hz - pitch of the bass thump
@@ -89,7 +89,7 @@ const unsigned int SPIKE_TIMEOUT = 50;   // ms; sustained press rejected after t
 // --- PIN / HARDWARE CONSTANTS ----------------------------------------
 const int audioOutPin = 9;            // bass out (must be pin 9)
 const int PCA_DUTY_MAX = 4095;
-const int ERM_OFF_DUTY = 4095;        // inverted logic: 4095 = off
+const int ERM_OFF_DUTY = 0;        // inverted logic: 4095 = off
 
 const int DRUM_PIN[NUM_DRUMS] = { A0, A1, A2, A3 };
 
@@ -114,7 +114,7 @@ struct Drum {
   bool spikeActive;
   bool spikeRejected;
 
-  float ermLevel;     // 0..255 - this drum's ERM envelope/home/uuind/Documents/Stanford/2025 - 2026/ME 327/HaptiDrum/327_Final/327_Final.ino
+  float ermLevel;     // 0..255 - this drum's ERM envelope
   float bassLevel;    // 0..255 - this drum's bass envelope
 
   int  strikeForce; 
@@ -132,7 +132,7 @@ void setup() {
   Wire.begin();
   pwm.begin();
   pwm.setPWMFreq(1000);
-  for (int ch = 0; ch < 16; ch++) pwm.setPWM(ch, 0, ERM_OFF_DUTY);
+  for (int ch = 0; ch < 16; ch++) pwm.setPWM(ch, 0, 0);
 
   for (int i = 0; i < NUM_DRUMS; i++) {
     drums[i].analogPin     = DRUM_PIN[i];
@@ -153,7 +153,7 @@ void writeRegion(int region, int level255) {
   if (level255 > 255) level255 = 255;
   if (level255 < ERM_CUTOFF) level255 = 0;        // snap-to-off floor
 
-  int duty = PCA_DUTY_MAX - (level255 * PCA_DUTY_MAX / 255);
+  int duty = (long)level255 * PCA_DUTY_MAX / 255; 
   for (int ch = REGION_CH_LO[region]; ch <= REGION_CH_HI[region]; ch++) {
     pwm.setPWM(ch, 0, duty);
   }
@@ -254,6 +254,7 @@ void loop() {
 
   if (waveState) analogWrite(audioOutPin, (int)bassSum);
   else           analogWrite(audioOutPin, 0);
+
 
   // ERM regions: SUM every active drum's contribution into each region.
   for (int r = 0; r < NUM_REGIONS; r++) {
